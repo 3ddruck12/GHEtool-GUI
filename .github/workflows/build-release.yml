@@ -1,0 +1,129 @@
+name: Build Release Packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Create virtual environment
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+          pip install PyInstaller
+
+      - name: PyInstaller Build
+        run: |
+          source venv/bin/activate
+          pyinstaller GHEtoolGUI.spec --clean --noconfirm
+
+      - name: Download appimagetool
+        run: |
+          wget -q "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" -O appimagetool
+          chmod +x appimagetool
+
+      - name: Build AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: ./build_appimage.sh
+
+      - name: Build DEB
+        run: ./build_deb.sh
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-AppImage
+          path: GHEtoolGUI-2.2.0-x86_64.AppImage
+
+      - name: Upload DEB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-DEB
+          path: GHEtoolGUI_2.2.0_amd64.deb
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+          pip install PyInstaller
+
+      - name: PyInstaller Build
+        run: |
+          pyinstaller GHEtoolGUI.spec --clean --noconfirm
+
+      - name: Create Output directory
+        run: New-Item -ItemType Directory -Force -Path Output
+
+      - name: Build Inno Setup Installer
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: GHEtoolGUI/installer.iss
+          options: /DLinkToGHEtool=${{ github.workspace }}
+
+      - name: Upload Windows Installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-Installer
+          path: Output/*.exe
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-AppImage
+          path: release/
+      - name: Download Linux DEB
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-DEB
+          path: release/
+      - name: Download Windows Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-Installer
+          path: release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
