@@ -34,8 +34,12 @@ mkdir -p "$PKG_DIR/DEBIAN"
 mkdir -p "$PKG_DIR/opt/$APP_NAME"
 mkdir -p "$PKG_DIR/usr/share/applications"
 mkdir -p "$PKG_DIR/usr/share/icons/hicolor/256x256/apps"
+mkdir -p "$PKG_DIR/usr/share/icons/hicolor/128x128/apps"
+mkdir -p "$PKG_DIR/usr/share/icons/hicolor/64x64/apps"
 mkdir -p "$PKG_DIR/usr/share/icons/hicolor/48x48/apps"
 mkdir -p "$PKG_DIR/usr/share/icons/hicolor/32x32/apps"
+mkdir -p "$PKG_DIR/usr/share/icons/hicolor/24x24/apps"
+mkdir -p "$PKG_DIR/usr/share/pixmaps"
 mkdir -p "$PKG_DIR/usr/bin"
 
 # 4. Dateien kopieren
@@ -50,8 +54,12 @@ ln -s "/opt/$APP_NAME/$APP_NAME" "$PKG_DIR/usr/bin/$APP_NAME"
 if [ -f "GHEtoolGUI/icons/icon_squared.png" ]; then
     echo "Kopiere Icons..."
     cp "GHEtoolGUI/icons/icon_squared.png" "$PKG_DIR/usr/share/icons/hicolor/256x256/apps/$APP_NAME.png"
+    cp "GHEtoolGUI/icons/icon_squared.png" "$PKG_DIR/usr/share/icons/hicolor/128x128/apps/$APP_NAME.png"
+    cp "GHEtoolGUI/icons/icon_squared.png" "$PKG_DIR/usr/share/icons/hicolor/64x64/apps/$APP_NAME.png"
     cp "GHEtoolGUI/icons/icon_squared.png" "$PKG_DIR/usr/share/icons/hicolor/48x48/apps/$APP_NAME.png"
     cp "GHEtoolGUI/icons/icon_squared.png" "$PKG_DIR/usr/share/icons/hicolor/32x32/apps/$APP_NAME.png"
+    cp "GHEtoolGUI/icons/icon_squared.png" "$PKG_DIR/usr/share/icons/hicolor/24x24/apps/$APP_NAME.png"
+    cp "GHEtoolGUI/icons/icon_squared.png" "$PKG_DIR/usr/share/pixmaps/$APP_NAME.png"
 fi
 
 # 5. Control-Datei erstellen
@@ -79,9 +87,38 @@ Icon=$APP_NAME
 Terminal=false
 Type=Application
 Categories=Science;Engineering;
+StartupWMClass=GHEtoolGUI
 EOF
 
-# 7. Bauen des Pakets
+# 7. Postinst-Skript (Icon-Cache aktualisieren nach Installation)
+echo "Erstelle postinst..."
+cat <<'POSTINST' > "$PKG_DIR/DEBIAN/postinst"
+#!/bin/sh
+set -e
+# Icon-Cache aktualisieren, damit das Icon im Startmenü und in der Taskleiste erscheint
+if [ -x /usr/bin/gtk-update-icon-cache ]; then
+    gtk-update-icon-cache -f /usr/share/icons/hicolor 2>/dev/null || true
+fi
+if [ -x /usr/bin/update-desktop-database ]; then
+    update-desktop-database /usr/share/applications 2>/dev/null || true
+fi
+POSTINST
+chmod 755 "$PKG_DIR/DEBIAN/postinst"
+
+# 8. Postrm-Skript (Icon-Cache bei Deinstallation)
+echo "Erstelle postrm..."
+cat <<'POSTRM' > "$PKG_DIR/DEBIAN/postrm"
+#!/bin/sh
+set -e
+if [ "$1" = "purge" ] || [ "$1" = "remove" ]; then
+    if [ -x /usr/bin/gtk-update-icon-cache ]; then
+        gtk-update-icon-cache -f /usr/share/icons/hicolor 2>/dev/null || true
+    fi
+fi
+POSTRM
+chmod 755 "$PKG_DIR/DEBIAN/postrm"
+
+# 9. Bauen des Pakets
 echo "Baue .deb Paket..."
 dpkg-deb --build "$PKG_DIR" "${DEB_NAME}.deb"
 
